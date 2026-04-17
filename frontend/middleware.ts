@@ -3,6 +3,12 @@ import { NextResponse, type NextRequest } from "next/server";
 
 const PUBLIC_PATHS = ["/", "/login", "/auth/callback"];
 
+type CookieToSet = {
+  name: string;
+  value: string;
+  options?: Record<string, unknown>;
+};
+
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next();
 
@@ -12,9 +18,9 @@ export async function middleware(req: NextRequest) {
     {
       cookies: {
         getAll: () => req.cookies.getAll(),
-        setAll: (list) => {
+        setAll: (list: CookieToSet[]) => {
           list.forEach(({ name, value, options }) =>
-            res.cookies.set(name, value, options)
+            res.cookies.set(name, value, options as never)
           );
         },
       },

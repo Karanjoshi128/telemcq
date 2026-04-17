@@ -1,0 +1,23 @@
+name: daily-scrape
+
+on:
+  schedule:
+    - cron: "0 3 * * *" # 03:00 UTC daily
+  workflow_dispatch:
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hit /scrape/all on backend
+        env:
+          BACKEND_URL: ${{ secrets.BACKEND_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -e
+          echo "Calling $BACKEND_URL/scrape/all"
+          curl -sS -X POST "$BACKEND_URL/scrape/all" \
+            -H "x-cron-secret: $CRON_SECRET" \
+            -H "Content-Type: application/json" \
+            --max-time 600 \
+            -w "\nHTTP %{http_code}\n"

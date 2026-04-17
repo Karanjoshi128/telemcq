@@ -1,0 +1,28 @@
+# env — exclude anything env-related, allow only the public templates
+.env
+.env.*
+*.env
+!.env.example
+!**/.env.example
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.session
+*.session-journal
+
+# node
+node_modules/
+.next/
+out/
+dist/
+.turbo/
+.pnpm-store/
+
+# misc
+.DS_Store
+*.log
+.vscode/
+.idea/

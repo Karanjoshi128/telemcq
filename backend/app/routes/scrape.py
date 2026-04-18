@@ -6,8 +6,7 @@ from ..core import ratelimit
 from ..core.crypto import decrypt
 from ..core.deps import current_user_id, require_cron_secret
 from ..core.supabase import service_client
-from ..tg.client import build_client
-from ..tg.scraper import _resolve_peer, _reveal_answer_via_vote, scrape_channel
+from ..tg.scraper import scrape_channel
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/scrape", tags=["scrape"])
@@ -66,62 +65,6 @@ async def scrape_me(user_id: str = Depends(current_user_id)):
     except Exception:
         log.exception("scrape_me failed")
         raise HTTPException(400, "Scrape failed")
-
-
-async def _backfill_answers(user_id: str) -> dict:
-    sb = service_client()
-    acct = sb.table("telegram_accounts").select("session_encrypted").eq("user_id", user_id).execute()
-    if not acct.data:
-        raise HTTPException(400, "Telegram not connected")
-    ch = sb.table("channels").select("*").eq("user_id", user_id).execute()
-    if not ch.data:
-        raise HTTPException(400, "No channel selected")
-    channel = ch.data[0]
-
-    missing = (
-        sb.table("mcqs")
-        .select("id, tg_msg_id")
-        .eq("user_id", user_id)
-        .is_("correct_answer", "null")
-        .execute()
-    )
-    if not missing.data:
-        return {"checked": 0, "revealed": 0}
-
-    session_str = decrypt(acct.data[0]["session_encrypted"])
-    client = build_client(session_str)
-    await client.connect()
-    try:
-        peer = await _resolve_peer(
-            client, channel["tg_channel_id"], channel.get("tg_access_hash")
-        )
-        revealed = 0
-        for row in missing.data:
-            try:
-                msg = await client.get_messages(peer, ids=row["tg_msg_id"])
-                if not msg:
-                    continue
-                key = await _reveal_answer_via_vote(client, peer, msg)
-                if key:
-                    sb.table("mcqs").update({"correct_answer": key}).eq("id", row["id"]).execute()
-                    revealed += 1
-            except Exception:
-                log.exception("backfill failed for mcq %s", row["id"])
-        return {"checked": len(missing.data), "revealed": revealed}
-    finally:
-        await client.disconnect()
-
-
-@router.post("/backfill-answers")
-async def backfill_answers(user_id: str = Depends(current_user_id)):
-    ratelimit.check(user_id, "backfill", limit=3, window_seconds=3600)
-    try:
-        return await _backfill_answers(user_id)
-    except HTTPException:
-        raise
-    except Exception:
-        log.exception("backfill_answers failed")
-        raise HTTPException(400, "Backfill failed")
 
 
 @router.post("/all", dependencies=[Depends(require_cron_secret)])

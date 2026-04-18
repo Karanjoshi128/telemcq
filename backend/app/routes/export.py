@@ -45,10 +45,9 @@ async def export_docx(
     if start > effective_end:
         raise HTTPException(400, "Start must be <= end")
 
-    # Supabase .range() is inclusive 0-based, matching our 1-based (start, end).
     mcqs = (
         sb.table("mcqs")
-        .select("id, category, question, options, correct_answer, source_date, created_at")
+        .select("id, category, question, options, correct_answer, source_date")
         .eq("user_id", user_id)
         .order("source_date")
         .range(start - 1, effective_end - 1)
@@ -58,17 +57,27 @@ async def export_docx(
     if not mcqs.data:
         raise HTTPException(404, "No MCQs in that range")
 
+    answers_res = (
+        sb.table("user_answers")
+        .select("mcq_id, selected_answer")
+        .eq("user_id", user_id)
+        .execute()
+    )
+    answer_map = {a["mcq_id"]: a["selected_answer"] for a in (answers_res.data or [])}
+
     is_range = start > 1 or effective_end < total
+    subtitle = (
+        f"Questions {start}-{effective_end} of {total}"
+        if is_range
+        else f"All MCQs ({total})"
+    )
+
     content = build_docx(
         user_email=email,
         channel_title=channel["title"],
         mcqs=mcqs.data,
-        incremental=False,
-        subtitle=(
-            f"Questions {start}-{effective_end} of {total}"
-            if is_range
-            else f"All MCQs ({total})"
-        ),
+        user_answers=answer_map,
+        subtitle=subtitle,
     )
 
     sb.table("channels").update({"last_exported_at": "now()"}).eq("id", channel["id"]).execute()

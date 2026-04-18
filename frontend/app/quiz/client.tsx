@@ -124,17 +124,21 @@ export function QuizClient({ initialQuery = "" }: { initialQuery?: string }) {
               <div className="mt-3 space-y-2">
                 {m.options.map((o) => {
                   const isSelected = selected === o.key;
-                  const isCorrect = m.correct_answer === o.key;
-                  const wrong = revealed && isSelected && !isCorrect;
-                  const good = revealed && isCorrect;
+                  // Only grade answers we actually know the correct key for.
+                  const hasKey = !!m.correct_answer;
+                  const isCorrect = hasKey && m.correct_answer === o.key;
+                  const wrong = revealed && hasKey && isSelected && !isCorrect;
+                  const good = revealed && hasKey && isCorrect;
+                  // When we don't have a correct key, just highlight the picked option in accent.
+                  const picked = revealed && !hasKey && isSelected;
                   return (
                     <label
                       key={o.key}
                       className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm transition-colors hairline ${
-                        good ? "border-[rgb(var(--accent))]" : ""
+                        good || picked ? "border-[rgb(var(--accent))]" : ""
                       } ${wrong ? "border-red-500/60" : ""}`}
                       style={
-                        good
+                        good || picked
                           ? { background: "rgba(0,220,130,0.08)" }
                           : wrong
                           ? { background: "rgba(239,68,68,0.08)" }
@@ -150,7 +154,9 @@ export function QuizClient({ initialQuery = "" }: { initialQuery?: string }) {
                       />
                       <span className="muted w-5 font-mono">{o.key}.</span>
                       <span className="flex-1">{o.text}</span>
-                      {good && <Check className="h-4 w-4" style={{ color: "rgb(var(--accent))" }} />}
+                      {(good || picked) && (
+                        <Check className="h-4 w-4" style={{ color: "rgb(var(--accent))" }} />
+                      )}
                       {wrong && <X className="h-4 w-4 text-red-500" />}
                     </label>
                   );
@@ -159,6 +165,11 @@ export function QuizClient({ initialQuery = "" }: { initialQuery?: string }) {
               {revealed && m.correct_answer && selected !== m.correct_answer && (
                 <div className="muted mt-2 text-xs">
                   Correct answer: {m.correct_answer}
+                </div>
+              )}
+              {revealed && !m.correct_answer && selected && (
+                <div className="muted mt-2 text-xs italic">
+                  Correct answer unknown — saved your choice.
                 </div>
               )}
             </li>

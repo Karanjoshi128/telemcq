@@ -19,13 +19,18 @@ def build_docx(
     user_email: str,
     channel_title: str,
     mcqs: list[dict],
-    incremental: bool = False,
+    user_answers: dict[str, str] | None = None,
     subtitle: str | None = None,
 ) -> bytes:
-    """Produce an answer-key style DOCX.
+    """Answer-key DOCX.
 
-    Each question shows its options and the correct answer in green.
+    Answer precedence per question:
+      1. User's selected answer from the quiz page (preferred — the client asked for this).
+      2. Channel's correct answer (if Telegram revealed it).
+      3. "Not attempted" placeholder.
     """
+    user_answers = user_answers or {}
+
     doc = Document()
 
     style = doc.styles["Normal"]
@@ -41,9 +46,7 @@ def build_docx(
 
     subtitle_para = doc.add_paragraph()
     subtitle_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    if subtitle is None:
-        subtitle = "New MCQs since last export" if incremental else "All MCQs"
-    st = subtitle_para.add_run(subtitle)
+    st = subtitle_para.add_run(subtitle or "All MCQs")
     st.italic = True
     st.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
 
@@ -72,28 +75,40 @@ def build_docx(
         qr.bold = True
         qr.font.size = Pt(12)
 
-        correct = m.get("correct_answer")
+        user_sel = user_answers.get(m["id"])
+        channel_correct = m.get("correct_answer")
+        # Priority: the *actual* correct answer (if Telegram revealed it) wins over
+        # the user's selection — a wrong attempt shouldn't be presented as the answer.
+        answer_key = channel_correct or user_sel
+        used_user_answer = answer_key is not None and answer_key == user_sel and not channel_correct
 
         for opt in m["options"]:
             p = doc.add_paragraph(style="List Bullet")
             p.paragraph_format.left_indent = Pt(18)
             run = p.add_run(f"{opt['key']}) {opt['text']}")
-            if correct and opt["key"] == correct:
+            if answer_key and opt["key"] == answer_key:
                 run.bold = True
                 run.font.color.rgb = RGBColor(0x00, 0x80, 0x00)
 
-        if correct:
-            ans_line = doc.add_paragraph()
+        ans_line = doc.add_paragraph()
+        if answer_key:
+            label = "Your answer" if used_user_answer else "Answer"
             ar = ans_line.add_run(
-                f"Answer: {correct}) {_option_text(m['options'], correct)}"
+                f"{label}: {answer_key}) {_option_text(m['options'], answer_key)}"
             )
             ar.bold = True
             ar.font.color.rgb = RGBColor(0x00, 0x80, 0x00)
         else:
-            ans_line = doc.add_paragraph()
-            ar = ans_line.add_run("Answer: (not provided)")
+            ar = ans_line.add_run("Answer: (not available)")
             ar.italic = True
             ar.font.color.rgb = RGBColor(0x88, 0x88, 0x88)
+
+        # If we showed the correct answer AND the user had attempted (and was wrong), note it.
+        if channel_correct and user_sel and user_sel != channel_correct:
+            note_line = doc.add_paragraph()
+            nr = note_line.add_run(f"(You chose: {user_sel})")
+            nr.italic = True
+            nr.font.color.rgb = RGBColor(0xC0, 0x00, 0x00)
 
         doc.add_paragraph("")
 

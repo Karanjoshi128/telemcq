@@ -8,9 +8,11 @@ settings = get_settings()
 
 app = FastAPI(title="TeleMCQ API", version="1.0.0")
 
+origins = [o.strip() for o in settings.FRONTEND_ORIGIN.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.FRONTEND_ORIGIN],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

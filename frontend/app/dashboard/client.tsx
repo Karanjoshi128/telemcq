@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, RefreshCw, Smartphone } from "lucide-react";
+import { Download, KeyRound, RefreshCw, Smartphone } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -24,6 +24,7 @@ export function DashboardClient() {
   const [status, setStatus] = useState<Status | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [backfilling, setBackfilling] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
 
   async function refresh() {
@@ -53,6 +54,20 @@ export function DashboardClient() {
       toast.error(e.message);
     } finally {
       setSyncing(false);
+    }
+  }
+
+  async function revealAnswers() {
+    if (!confirm("This will cast a vote on each quiz poll that has no known answer, to reveal the correct option. Your Telegram will show you've voted. Continue?")) return;
+    setBackfilling(true);
+    try {
+      const r = await apiPost<{ checked: number; revealed: number }>("/scrape/backfill-answers");
+      toast.success(`Checked ${r.checked} · revealed ${r.revealed} answers`);
+      await refresh();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setBackfilling(false);
     }
   }
 
@@ -112,6 +127,15 @@ export function DashboardClient() {
             >
               <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
               {syncing ? "Syncing…" : "Sync now"}
+            </button>
+            <button
+              onClick={revealAnswers}
+              disabled={backfilling}
+              className="btn-ghost flex-1 sm:flex-initial"
+              title="Reveal correct answers by voting on unanswered polls"
+            >
+              <KeyRound className={`h-4 w-4 ${backfilling ? "animate-pulse" : ""}`} />
+              {backfilling ? "Revealing…" : "Reveal answers"}
             </button>
             <button
               onClick={() => setExportOpen(true)}

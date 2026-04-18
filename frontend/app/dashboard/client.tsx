@@ -4,7 +4,8 @@ import { Download, RefreshCw, Smartphone } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { apiDownload, apiGet, apiPost } from "@/lib/api";
+import { ExportModal } from "@/components/export-modal";
+import { apiGet, apiPost } from "@/lib/api";
 
 type Status = {
   connected: boolean;
@@ -23,7 +24,7 @@ export function DashboardClient() {
   const [status, setStatus] = useState<Status | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const [syncing, setSyncing] = useState(false);
-  const [exporting, setExporting] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
 
   async function refresh() {
     try {
@@ -55,17 +56,6 @@ export function DashboardClient() {
     }
   }
 
-  async function exportDocx() {
-    setExporting(true);
-    try {
-      await apiDownload("/export/docx");
-      toast.success("Download started");
-    } catch (e: any) {
-      toast.error(e.message);
-    } finally {
-      setExporting(false);
-    }
-  }
 
   if (!status) return <div className="muted">Loading…</div>;
 
@@ -124,12 +114,12 @@ export function DashboardClient() {
               {syncing ? "Syncing…" : "Sync now"}
             </button>
             <button
-              onClick={exportDocx}
-              disabled={exporting}
+              onClick={() => setExportOpen(true)}
+              disabled={!stats || stats.total === 0}
               className="btn-primary flex-1 sm:flex-initial"
             >
               <Download className="h-4 w-4" />
-              {exporting ? "Exporting…" : "Export DOCX"}
+              Export DOCX
             </button>
           </div>
         </div>
@@ -160,6 +150,12 @@ export function DashboardClient() {
           Search MCQs
         </Link>
       </div>
+
+      <ExportModal
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        total={stats?.total ?? 0}
+      />
     </div>
   );
 }

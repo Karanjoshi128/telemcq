@@ -6,7 +6,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Pt, RGBColor
 
 
-def _answered_option_text(opts: list[dict], key: str | None) -> str:
+def _option_text(opts: list[dict], key: str | None) -> str:
     if not key:
         return ""
     for o in opts:
@@ -19,10 +19,12 @@ def build_docx(
     user_email: str,
     channel_title: str,
     mcqs: list[dict],
-    user_answers: dict[str, str],
+    incremental: bool = False,
+    subtitle: str | None = None,
 ) -> bytes:
-    """mcqs: list of rows from DB (id, category, question, options, correct_answer, source_date)
-    user_answers: { mcq_id: selected_key }
+    """Produce an answer-key style DOCX.
+
+    Each question shows its options and the correct answer in green.
     """
     doc = Document()
 
@@ -37,6 +39,14 @@ def build_docx(
     run.bold = True
     run.font.size = Pt(24)
 
+    subtitle_para = doc.add_paragraph()
+    subtitle_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    if subtitle is None:
+        subtitle = "New MCQs since last export" if incremental else "All MCQs"
+    st = subtitle_para.add_run(subtitle)
+    st.italic = True
+    st.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
+
     meta = doc.add_paragraph()
     meta.alignment = WD_ALIGN_PARAGRAPH.CENTER
     meta.add_run(f"Channel: {channel_title}\n").bold = True
@@ -46,7 +56,7 @@ def build_docx(
 
     doc.add_page_break()
 
-    current_category = object()
+    current_category: object | str = object()
     for n, m in enumerate(mcqs, 1):
         cat = m.get("category") or "Uncategorised"
         if cat != current_category:
@@ -62,28 +72,28 @@ def build_docx(
         qr.bold = True
         qr.font.size = Pt(12)
 
+        correct = m.get("correct_answer")
+
         for opt in m["options"]:
             p = doc.add_paragraph(style="List Bullet")
             p.paragraph_format.left_indent = Pt(18)
-            p.add_run(f"{opt['key']}) {opt['text']}")
+            run = p.add_run(f"{opt['key']}) {opt['text']}")
+            if correct and opt["key"] == correct:
+                run.bold = True
+                run.font.color.rgb = RGBColor(0x00, 0x80, 0x00)
 
-        selected = user_answers.get(m["id"])
-        correct = m.get("correct_answer")
-
-        if selected:
-            sel_line = doc.add_paragraph()
-            sr = sel_line.add_run(f"Your answer: {selected}) {_answered_option_text(m['options'], selected)}")
-            sr.italic = True
-            if correct:
-                sr.font.color.rgb = (
-                    RGBColor(0x00, 0x80, 0x00) if selected == correct else RGBColor(0xC0, 0x00, 0x00)
-                )
-
-        if correct and selected:
-            c_line = doc.add_paragraph()
-            cr = c_line.add_run(f"Correct: {correct}) {_answered_option_text(m['options'], correct)}")
-            cr.bold = True
-            cr.font.color.rgb = RGBColor(0x00, 0x80, 0x00)
+        if correct:
+            ans_line = doc.add_paragraph()
+            ar = ans_line.add_run(
+                f"Answer: {correct}) {_option_text(m['options'], correct)}"
+            )
+            ar.bold = True
+            ar.font.color.rgb = RGBColor(0x00, 0x80, 0x00)
+        else:
+            ans_line = doc.add_paragraph()
+            ar = ans_line.add_run("Answer: (not provided)")
+            ar.italic = True
+            ar.font.color.rgb = RGBColor(0x88, 0x88, 0x88)
 
         doc.add_paragraph("")
 
